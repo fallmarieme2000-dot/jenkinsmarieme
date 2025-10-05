@@ -34,7 +34,7 @@ pipeline {
 
         stage('Install dependencies - Backend') {
             steps {
-                dir('back-end') {
+                dir('backend') {
                     sh 'npm install'
                 }
             }
@@ -42,7 +42,7 @@ pipeline {
 
         stage('Install dependencies - Frontend') {
             steps {
-                dir('front-end') {
+                dir('frontend') {
                     sh 'npm install'
                 }
             }
@@ -60,8 +60,8 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 script {
-                    sh "docker build -t $DOCKER_HUB_USER/$FRONT_IMAGE:latest ./front-end"
-                    sh "docker build -t $DOCKER_HUB_USER/$BACK_IMAGE:latest ./back-end"
+                    sh "docker build -t $DOCKER_HUB_USER/$FRONT_IMAGE:latest ./frontend"
+                    sh "docker build -t $DOCKER_HUB_USER/$BACK_IMAGE:latest ./backend"
                 }
             }
         }
