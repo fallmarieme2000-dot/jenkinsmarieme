@@ -51,8 +51,8 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    sh 'cd back-end && npm test || echo "Aucun test backend"'
-                    sh 'cd front-end && npm test || echo "Aucun test frontend"'
+                    sh 'cd backend && npm test || echo "Aucun test backend"'
+                    sh 'cd frontend && npm test || echo "Aucun test frontend"'
                 }
             }
         }
