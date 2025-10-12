@@ -80,7 +80,7 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 // Définit un délai maximum de 3 minutes pour attendre la réponse de SonarQube
-                timeout(time: 3, unit: 'MINUTES') {
+                timeout(time: 10, unit: 'MINUTES') {
                     // Attend le résultat du Quality Gate (succès ou échec)
                     // Si le Quality Gate échoue, le pipeline est automatiquement interrompu (abortPipeline: true)
                     waitForQualityGate abortPipeline: true
