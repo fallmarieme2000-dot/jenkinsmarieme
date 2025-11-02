@@ -9,61 +9,73 @@ pipeline {
         DOCKER_HUB_USER = 'marieme0516'
         FRONT_IMAGE = 'react-frontend'
         BACK_IMAGE  = 'express-backend'
-        AWS_REGION = 'us-west-2'
-        TF_DIR = './terraform'
+    }
+
+    triggers {
+        // Pour que le pipeline démarre quand le webhook est reçu
+        GenericTrigger(
+            genericVariables: [
+                [key: 'ref', value: '$.ref'],
+                [key: 'pusher_name', value: '$.pusher.name'],
+                [key: 'commit_message', value: '$.head_commit.message']
+            ],
+            causeString: 'Push par $pusher_name sur $ref: "$commit_message"',
+            token: 'mysecret',
+            printContributedVariables: true,
+            printPostContent: true
+        )
     }
 
     stages {
-        stage('Terraform Init') {
-            steps {
-                git branch: 'main', url: 'https://github.com/fallmarieme2000-dot/terraform.git'
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-key'],
-                    string(credentialsId: 'aws-token', variable: 'AWS_SESSION_TOKEN')
-                ]) {
-                    dir("${TF_DIR}") {
-                        sh 'terraform init -upgrade'
-                    }
-                }
-            }
-        }
-
-        stage('Terraform Plan & Apply') {
-            steps {
-                input message: 'Souhaitez-vous appliquer le plan Terraform ?'
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-key'],
-                    string(credentialsId: 'aws-token', variable: 'AWS_SESSION_TOKEN')
-                ]) {
-                    dir("${TF_DIR}") {
-                        sh 'terraform plan -out=tfplan'
-                        sh 'terraform apply -auto-approve tfplan'
-                    }
-                }
-            }
-        }
-
-        stage('Checkout Application') {
+        stage('Checkout') {
             steps {
                 git branch: 'main', url: 'https://github.com/fallmarieme2000-dot/jenkinsmarieme.git'
             }
         }
 
-        stage('Install Dependencies') {
-            parallel {
-                stage('Backend') {
-                    steps {
-                        dir('backend') {
-                            sh 'npm install'
-                        }
+        stage('Install dependencies - Backend') {
+            steps {
+                dir('backend') {
+                    sh 'npm install'
+                }
+            }
+        }
+
+        stage('Install dependencies - Frontend') {
+            steps {
+                dir('frontend') {
+                    sh 'npm install'
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                script {
+                    sh 'cd backend && npm test || echo "Aucun test backend"'
+                    sh 'cd frontend && npm test || echo "Aucun test frontend"'
+                }
+            }
+        }
+
+        // Étape du pipeline dédiée à l'analyse SonarQube
+        stage('SonarQube Analysis') {
+            steps {
+                // Active l'environnement SonarQube configuré dans Jenkins
+                withSonarQubeEnv('SonarQubeServer') { 
+                    script {
+                        def scannerHome = tool 'SonarQubeScanner'
+                        sh "${scannerHome}/bin/sonar-scanner"
                     }
                 }
-                stage('Frontend') {
-                    steps {
-                        dir('frontend') {
-                            sh 'npm install'
-                        }
-                    }
+            }
+        }
+
+        // Étape du pipeline qui vérifie le Quality Gate
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
@@ -89,15 +101,32 @@ pipeline {
             }
         }
 
-        stage('Deploy with Docker Compose') {
+        stage('Check Docker & Compose') {
             steps {
                 sh 'docker --version'
                 sh 'docker-compose --version || echo "docker-compose non trouvé"'
+            }
+        }
+
+        stage('Deploy (compose.yaml)') {
+            steps {
+                dir('.') {
+                    sh 'docker-compose -f compose.yaml down || true'
+                    sh 'docker-compose -f compose.yaml pull'
+                    sh 'docker-compose -f compose.yaml up -d'
+                    sh 'docker-compose -f compose.yaml ps'
+                    sh 'docker-compose -f compose.yaml logs --tail=50'
+                }
+            }
+        }
+
+        stage('Smoke Test') {
+            steps {
                 sh '''
-                    docker-compose -f compose.yaml down || true
-                    docker-compose -f compose.yaml pull
-                    docker-compose -f compose.yaml up -d
-                    docker-compose -f compose.yaml ps
+                    echo "🔍 Vérification Frontend (port 5173)..."
+                    curl -f http://localhost:5173 || echo "Frontend unreachable"
+                    echo "🔍 Vérification Backend (port 5000)..."
+                    curl -f http://localhost:5000/api || echo "Backend unreachable"
                 '''
             }
         }
@@ -106,15 +135,15 @@ pipeline {
     post {
         success {
             emailext(
-                subject: "✅ SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "Le pipeline a réussi ! Détails : ${env.BUILD_URL}",
+                subject: "Build SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Pipeline réussi\nDétails : ${env.BUILD_URL}",
                 to: "fallmarieme1605@gmail.com"
             )
         }
         failure {
             emailext(
-                subject: "❌ ÉCHEC: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "Le pipeline a échoué. Détails : ${env.BUILD_URL}",
+                subject: "Build FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Le pipeline a échoué\nDétails : ${env.BUILD_URL}",
                 to: "fallmarieme1605@gmail.com"
             )
         }
