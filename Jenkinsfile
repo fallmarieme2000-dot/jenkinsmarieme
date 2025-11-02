@@ -38,7 +38,7 @@ stages {
     // ======================
     stage('Terraform Init') {
         steps {
-            git branch: 'main', url: 'https://github.com/fallmarieme2000-dot/terraform.git'
+            git branch: 'main', url: 'https://github.com/fallmarieme2000-dot/jenkinsmarieme.git'
             withCredentials([
                 [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-key'],
                 string(credentialsId: 'aws-token', variable: 'AWS_SESSION_TOKEN')
